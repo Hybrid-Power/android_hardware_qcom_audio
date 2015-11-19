@@ -17,6 +17,19 @@
 #ifndef QCOM_AUDIO_PLATFORM_H
 #define QCOM_AUDIO_PLATFORM_H
 
+enum {
+    FLUENCE_DISABLE,                  /* Target dosent support fluence */
+    FLUENCE_ENABLE      = 0x1,        /* Target supports fluence */
+    FLUENCE_PRO_ENABLE  = 0x2,        /* Target supports fluence pro */
+};
+
+enum {
+    SOURCE_MONO_MIC  = 0x1,            /* Target contains 1 mic */
+    SOURCE_DUAL_MIC  = 0x2,            /* Target contains 2 mics */
+    SOURCE_THREE_MIC = 0x4,            /* Target contains 3 mics */
+    SOURCE_QUAD_MIC  = 0x8,            /* Target contains 4 mics */
+};
+
 /*
  * Below are the devices for which is back end is same, SLIMBUS_0_RX.
  * All these devices are handled by the internal HW codec. We can
@@ -25,7 +38,8 @@
 #define AUDIO_DEVICE_OUT_ALL_CODEC_BACKEND \
     (AUDIO_DEVICE_OUT_EARPIECE | AUDIO_DEVICE_OUT_SPEAKER | \
      AUDIO_DEVICE_OUT_SPEAKER_SAFE | \
-     AUDIO_DEVICE_OUT_WIRED_HEADSET | AUDIO_DEVICE_OUT_WIRED_HEADPHONE)
+     AUDIO_DEVICE_OUT_WIRED_HEADSET | AUDIO_DEVICE_OUT_WIRED_HEADPHONE | \
+     AUDIO_DEVICE_OUT_LINE)
 
 /* Sound devices specific to the platform
  * The DEVICE_OUT_* and DEVICE_IN_* should be mapped to these sound
@@ -44,7 +58,9 @@ enum {
     SND_DEVICE_OUT_HEADPHONES,
     SND_DEVICE_OUT_LINE,
     SND_DEVICE_OUT_SPEAKER_AND_HEADPHONES,
+    SND_DEVICE_OUT_SPEAKER_SAFE_AND_HEADPHONES,
     SND_DEVICE_OUT_SPEAKER_AND_LINE,
+    SND_DEVICE_OUT_SPEAKER_SAFE_AND_LINE,
     SND_DEVICE_OUT_VOICE_HANDSET,
     SND_DEVICE_OUT_VOICE_SPEAKER,
     SND_DEVICE_OUT_VOICE_HEADPHONES,
@@ -59,6 +75,8 @@ enum {
     SND_DEVICE_OUT_VOICE_TTY_HCO_HANDSET,
     SND_DEVICE_OUT_VOICE_HAC_HANDSET,
     SND_DEVICE_OUT_VOICE_TX,
+    SND_DEVICE_OUT_SPEAKER_PROTECTED,
+    SND_DEVICE_OUT_VOICE_SPEAKER_PROTECTED,
     SND_DEVICE_OUT_END,
 
     /*
@@ -92,8 +110,9 @@ enum {
 
     SND_DEVICE_IN_HDMI_MIC,
     SND_DEVICE_IN_BT_SCO_MIC,
+    SND_DEVICE_IN_BT_SCO_MIC_NREC,
     SND_DEVICE_IN_BT_SCO_MIC_WB,
-
+    SND_DEVICE_IN_BT_SCO_MIC_WB_NREC,
     SND_DEVICE_IN_CAMCORDER_MIC,
 
     SND_DEVICE_IN_VOICE_DMIC,
@@ -109,9 +128,16 @@ enum {
     SND_DEVICE_IN_VOICE_REC_MIC_NS,
     SND_DEVICE_IN_VOICE_REC_DMIC_STEREO,
     SND_DEVICE_IN_VOICE_REC_DMIC_FLUENCE,
+    SND_DEVICE_IN_VOICE_REC_HEADSET_MIC,
 
     SND_DEVICE_IN_VOICE_RX,
 
+    SND_DEVICE_IN_THREE_MIC,
+    SND_DEVICE_IN_QUAD_MIC,
+    SND_DEVICE_IN_CAPTURE_VI_FEEDBACK,
+
+    SND_DEVICE_IN_HANDSET_TMIC,
+    SND_DEVICE_IN_HANDSET_QMIC,
     SND_DEVICE_IN_END,
 
     SND_DEVICE_MAX = SND_DEVICE_IN_END,
@@ -123,20 +149,13 @@ enum {
 #define ALL_SESSION_VSID                0xFFFFFFFF
 #define DEFAULT_MUTE_RAMP_DURATION_MS   20
 #define DEFAULT_VOLUME_RAMP_DURATION_MS 20
+#define MIXER_PATH_MAX_LENGTH 100
 
-#ifdef PLATFORM_MSM8084
-#define ACDB_ID_VOICE_SPEAKER 66
-#define ACDB_ID_VOICE_HANDSET 67
-#define ACDB_ID_VOICE_HANDSET_TMUS 67
-#define ACDB_ID_VOICE_DMIC_EF_TMUS 89
-#define ACDB_ID_HEADSET_MIC_AEC 47
-#else
 #define ACDB_ID_VOICE_SPEAKER 15
 #define ACDB_ID_VOICE_HANDSET 7
 #define ACDB_ID_VOICE_HANDSET_TMUS 88
 #define ACDB_ID_VOICE_DMIC_EF_TMUS 89
-#define ACDB_ID_HEADSET_MIC_AEC 10
-#endif
+#define ACDB_ID_HEADSET_MIC_AEC 8
 
 #define MAX_VOL_INDEX 5
 #define MIN_VOL_INDEX 0
@@ -151,8 +170,11 @@ enum {
  * We should take care of returning proper size when AudioFlinger queries for
  * the buffer size of an input/output stream
  */
-#define DEEP_BUFFER_OUTPUT_PERIOD_SIZE 960
-#define DEEP_BUFFER_OUTPUT_PERIOD_COUNT 8
+
+/* 1920 frames(40ms) at 2 buffers gives a good tradeoff between power and latency */
+#define DEEP_BUFFER_OUTPUT_PERIOD_SIZE 1920
+#define DEEP_BUFFER_OUTPUT_PERIOD_COUNT 2
+
 #define LOW_LATENCY_OUTPUT_PERIOD_SIZE 240
 #define LOW_LATENCY_OUTPUT_PERIOD_COUNT 2
 
@@ -171,22 +193,22 @@ enum {
 #define DEEP_BUFFER_PCM_DEVICE 0
 #define AUDIO_RECORD_PCM_DEVICE 0
 #define MULTIMEDIA2_PCM_DEVICE 1
+
+#define SPKR_PROT_CALIB_RX_PCM_DEVICE 5
+#define SPKR_PROT_CALIB_TX_PCM_DEVICE 25
+
+#define MULTIMEDIA3_PCM_DEVICE 4
+
+#define QUAT_MI2S_PCM_DEVICE    44
 #define PLAYBACK_OFFLOAD_DEVICE 9
 #define LOWLATENCY_PCM_DEVICE 15
 #define VOICE_VSID  0x10C01000
-#ifdef PLATFORM_MSM8084
-#define VOICE_CALL_PCM_DEVICE 20
-#define VOICE2_CALL_PCM_DEVICE 25
-#define VOLTE_CALL_PCM_DEVICE 21
-#define QCHAT_CALL_PCM_DEVICE 33
-#define VOWLAN_CALL_PCM_DEVICE -1
-#else
+
 #define VOICE_CALL_PCM_DEVICE 2
 #define VOICE2_CALL_PCM_DEVICE 22
 #define VOLTE_CALL_PCM_DEVICE 14
 #define QCHAT_CALL_PCM_DEVICE 20
 #define VOWLAN_CALL_PCM_DEVICE 36
-#endif
 
 #define AFE_PROXY_PLAYBACK_PCM_DEVICE 7
 #define AFE_PROXY_RECORD_PCM_DEVICE 8
@@ -202,6 +224,10 @@ enum {
 
 #define LIB_CSD_CLIENT "libcsd-client.so"
 #define LIB_MDM_DETECT "libmdmdetect.so"
+
+#define PLATFORM_CONFIG_KEY_SOUNDCARD_NAME "snd_card_name"
+#define PLATFORM_CONFIG_KEY_MAX_MIC_COUNT "input_mic_max_count"
+#define PLATFORM_DEFAULT_MIC_COUNT 2
 
 /* CSD-CLIENT related functions */
 typedef int (*init_t)(bool);
