@@ -81,6 +81,7 @@ struct platform_data {
     bool fluence_in_voice_call;
     bool fluence_in_voice_rec;
     int  dualmic_config;
+    bool speaker_lr_swap;
 
     void *acdb_handle;
     acdb_init_t acdb_init;
@@ -126,6 +127,8 @@ static const char * const device_table[SND_DEVICE_MAX] = {
     [SND_DEVICE_OUT_BT_SCO] = "bt-sco-headset",
     [SND_DEVICE_OUT_BT_SCO_WB] = "bt-sco-headset-wb",
     [SND_DEVICE_OUT_VOICE_HANDSET_TMUS] = "voice-handset-tmus",
+    [SND_DEVICE_OUT_VOICE_HANDSET] = "voice-handset-tmus",
+    [SND_DEVICE_OUT_VOICE_HAC_HANDSET] = "voice-handset-tmus",
     [SND_DEVICE_OUT_VOICE_TTY_FULL_HEADPHONES] = "voice-tty-full-headphones",
     [SND_DEVICE_OUT_VOICE_TTY_VCO_HEADPHONES] = "voice-tty-vco-headphones",
     [SND_DEVICE_OUT_VOICE_TTY_HCO_HANDSET] = "voice-tty-hco-handset",
@@ -174,6 +177,8 @@ static const int acdb_device_table[SND_DEVICE_MAX] = {
     [SND_DEVICE_OUT_BT_SCO] = 22,
     [SND_DEVICE_OUT_BT_SCO_WB] = 39,
     [SND_DEVICE_OUT_VOICE_HANDSET_TMUS] = 81,
+    [SND_DEVICE_OUT_VOICE_HANDSET] = 81,
+    [SND_DEVICE_OUT_VOICE_HAC_HANDSET] = 81,
     [SND_DEVICE_OUT_VOICE_TTY_FULL_HEADPHONES] = 17,
     [SND_DEVICE_OUT_VOICE_TTY_VCO_HEADPHONES] = 17,
     [SND_DEVICE_OUT_VOICE_TTY_HCO_HANDSET] = 37,
@@ -418,6 +423,19 @@ int platform_set_snd_device_acdb_id(snd_device_t snd_device __unused,
     return -ENODEV;
 }
 
+int platform_get_snd_device_acdb_id(snd_device_t snd_device __unused)
+{
+    ALOGE("%s: Not implemented", __func__);
+    return -ENOSYS;
+}
+
+void platform_add_operator_specific_device(snd_device_t snd_device __unused,
+                                           const char *operator __unused,
+                                           const char *mixer_path __unused,
+                                           unsigned int acdb_id __unused)
+{
+}
+
 int platform_send_audio_calibration(void *platform, snd_device_t snd_device)
 {
     struct platform_data *my_data = (struct platform_data *)platform;
@@ -533,6 +551,11 @@ int platform_stop_voice_call(void *platform, uint32_t vsid __unused)
     }
 
     return ret;
+}
+
+void platform_set_speaker_gain_in_combo(struct audio_device *adev __unused,
+                                        snd_device_t snd_device  __unused,
+                                        bool enable __unused) {
 }
 
 int platform_set_voice_volume(void *platform, int volume)
@@ -657,7 +680,7 @@ snd_device_t platform_get_output_snd_device(void *platform, audio_devices_t devi
         devices & AUDIO_DEVICE_OUT_WIRED_HEADSET) {
         snd_device = SND_DEVICE_OUT_HEADPHONES;
     } else if (devices & AUDIO_DEVICE_OUT_SPEAKER) {
-        if (adev->speaker_lr_swap)
+        if (my_data->speaker_lr_swap)
             snd_device = SND_DEVICE_OUT_SPEAKER_REVERSE;
         else
             snd_device = SND_DEVICE_OUT_SPEAKER;
@@ -953,6 +976,13 @@ int platform_stop_incall_music_usecase(void *platform __unused)
     return -ENOSYS;
 }
 
+int platform_set_parameters(void *platform __unused,
+                            struct str_parms *parms __unused)
+{
+    ALOGE("%s: Not implemented", __func__);
+    return -ENOSYS;
+}
+
 /* Delay in Us */
 int64_t platform_render_latency(audio_usecase_t usecase)
 {
@@ -997,12 +1027,64 @@ int platform_set_usecase_pcm_id(audio_usecase_t usecase __unused, int32_t type _
 }
 
 int platform_set_snd_device_backend(snd_device_t device __unused,
-                                    const char *backend __unused)
+                                    const char *backend __unused,
+                                    const char *hw_interface __unused)
 {
     return -ENOSYS;
 }
 
-void platform_set_echo_reference(struct audio_device *adev, bool enable, audio_devices_t out_device)
+void platform_set_echo_reference(struct audio_device *adev __unused,
+                                 bool enable __unused,
+                                 audio_devices_t out_device __unused)
 {
     return;
+}
+
+int platform_swap_lr_channels(struct audio_device *adev, bool swap_channels)
+{
+    // only update the selected device if there is active pcm playback
+    struct audio_usecase *usecase;
+    struct listnode *node;
+    struct platform_data *my_data = (struct platform_data *)adev->platform;
+    int status = 0;
+
+    if (my_data->speaker_lr_swap != swap_channels) {
+        my_data->speaker_lr_swap = swap_channels;
+
+        list_for_each(node, &adev->usecase_list) {
+            usecase = node_to_item(node, struct audio_usecase, list);
+            if (usecase->type == PCM_PLAYBACK &&
+                usecase->stream.out->devices & AUDIO_DEVICE_OUT_SPEAKER) {
+                const char *mixer_path;
+                if (swap_channels) {
+                    mixer_path = platform_get_snd_device_name(SND_DEVICE_OUT_SPEAKER_REVERSE);
+                    audio_route_apply_and_update_path(adev->audio_route, mixer_path);
+                } else {
+                    mixer_path = platform_get_snd_device_name(SND_DEVICE_OUT_SPEAKER);
+                    audio_route_apply_and_update_path(adev->audio_route, mixer_path);
+                }
+                break;
+            }
+        }
+    }
+    return status;
+}
+
+bool platform_send_gain_dep_cal(void *platform __unused,
+                                int level __unused)
+{
+    return 0;
+}
+
+bool platform_can_split_snd_device(snd_device_t in_snd_device __unused,
+                                   int *num_devices __unused,
+                                   snd_device_t *out_snd_devices __unused)
+{
+    return false;
+}
+
+bool platform_check_backends_match(snd_device_t snd_device1 __unused,
+                                   snd_device_t snd_device2 __unused)
+{
+    return true;
 }
